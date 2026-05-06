@@ -176,8 +176,10 @@ export function ShaderLandscape({
         iTime: { value: 0 },
         iChannel0: { value: null },
         // Tunables del monolito (sincronizados con leva en useFrame).
-        uMonoOffsetY: { value: -0.13 },
-        uMonoScaleDesktop: { value: 0.15 },
+        uMonoOffsetX: { value: 0.0 },
+        uMonoOffsetY: { value: 0.2 },
+        uMonoOffsetZ: { value: 0.0 },
+        uMonoScaleDesktop: { value: 0.43 },
         uMonoScaleMobile: { value: 0.50 },
       },
     });
@@ -187,32 +189,49 @@ export function ShaderLandscape({
   // Controles leva para ajustar el monolito en vivo. Los valores se persisten
   // en localStorage automáticamente. Una vez fijos los valores deseados, se
   // pueden hardcodear en cube.frag.ts y eliminar leva.
-  const { uMonoOffsetY, uMonoScaleDesktop, uMonoScaleMobile } = useControls(
-    'Monolito',
-    {
-      uMonoOffsetY: {
-        label: 'offset Y',
-        value: -0.13,
-        min: -0.5,
-        max: 0.5,
-        step: 0.005,
-      },
-      uMonoScaleDesktop: {
-        label: 'scale desktop',
-        value: 0.15,
-        min: 0.05,
-        max: 1.0,
-        step: 0.01,
-      },
-      uMonoScaleMobile: {
-        label: 'scale móvil',
-        value: 0.50,
-        min: 0.05,
-        max: 1.0,
-        step: 0.01,
-      },
+  const {
+    uMonoOffsetX,
+    uMonoOffsetY,
+    uMonoOffsetZ,
+    uMonoScaleDesktop,
+    uMonoScaleMobile,
+  } = useControls('Monolito', {
+    uMonoOffsetX: {
+      label: 'offset X',
+      value: 0.0,
+      min: -0.5,
+      max: 0.5,
+      step: 0.005,
     },
-  );
+    uMonoOffsetY: {
+      label: 'offset Y',
+      value: 0.2,
+      min: -0.5,
+      max: 0.5,
+      step: 0.005,
+    },
+    uMonoOffsetZ: {
+      label: 'offset Z (depth)',
+      value: 0.0,
+      min: -2.0,
+      max: 4.0,
+      step: 0.05,
+    },
+    uMonoScaleDesktop: {
+      label: 'scale desktop',
+      value: 0.43,
+      min: 0.05,
+      max: 1.0,
+      step: 0.01,
+    },
+    uMonoScaleMobile: {
+      label: 'scale móvil',
+      value: 0.50,
+      min: 0.05,
+      max: 1.0,
+      step: 0.01,
+    },
+  });
 
   // Cuatro escenas + cámara ortográfica trivial
   const { sceneMain, sceneClouds, sceneCompose, sceneCube, fsCamera, geom } = useMemo(() => {
@@ -243,16 +262,25 @@ export function ShaderLandscape({
     notifiedFirst: false,
   });
 
-  // Resize debounced. También se ejecuta cuando cambian los controles leva
-  // de performance (dprCap/resScale): redimensiona los FBOs al instante.
+  // Resize. Se ejecuta cuando cambia el viewport (debounced 100ms para no
+  // thrasher con drag de ventana) Y cuando cambian dpr/resScale por leva
+  // (sin debounce, fix inmediato para evitar mismatch entre drawingbuffer
+  // del canvas y FBO size → líneas estiradas en el borde derecho).
+  //
+  // CRITICO: usamos gl.drawingBufferWidth/Height (lo que el canvas REALMENTE
+  // tiene tras setPixelRatio) en vez de Math.floor(size.width * dpr).
+  // Con DPR no entero (ej. 1.3) el redondeo del browser puede diferir y
+  // dejar 1-2 columnas de desincronía → la última columna del FBO se
+  // replica con ClampToEdge en el cube.frag → "líneas estiradas a la derecha".
   useEffect(() => {
-    const handle = setTimeout(() => {
-      const mw = Math.max(1, Math.floor(size.width * dpr * resScale));
-      const mh = Math.max(1, Math.floor(size.height * dpr * resScale));
-      const cw = Math.max(1, Math.floor(size.width * dpr * RES_SCALE_CLOUDS));
-      const ch = Math.max(1, Math.floor(size.height * dpr * RES_SCALE_CLOUDS));
-      const fullW = Math.max(1, Math.floor(size.width * dpr));
-      const fullH = Math.max(1, Math.floor(size.height * dpr));
+    const apply = () => {
+      const ctx = gl.getContext();
+      const fullW = Math.max(1, ctx.drawingBufferWidth);
+      const fullH = Math.max(1, ctx.drawingBufferHeight);
+      const mw = Math.max(1, Math.floor(fullW * resScale));
+      const mh = Math.max(1, Math.floor(fullH * resScale));
+      const cw = Math.max(1, Math.floor(fullW * RES_SCALE_CLOUDS));
+      const ch = Math.max(1, Math.floor(fullH * RES_SCALE_CLOUDS));
       mainHi.setSize(mw, mh);
       cloudsLo.setSize(cw, ch);
       composeOut.setSize(fullW, fullH);
@@ -260,7 +288,10 @@ export function ShaderLandscape({
       cloudsMat.uniforms.iResolution.value.set(cw, ch, 1);
       cubeMat.uniforms.iResolution.value.set(fullW, fullH, 1);
       stateRef.current.frame = 0; // invalida reproyección
-    }, 100);
+    };
+    // Window resize: debounce 100ms. Leva slider drag: también pasa por aquí
+    // pero el debounce es aceptable (el slider termina en un valor estable).
+    const handle = setTimeout(apply, 100);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.width, size.height, dpr, resScale]);
@@ -310,7 +341,9 @@ export function ShaderLandscape({
 
     // Sync uniforms del monolito con leva (siempre, también en pausa, para
     // que los cambios del panel se reflejen al instante).
+    cubeMat.uniforms.uMonoOffsetX.value = uMonoOffsetX;
     cubeMat.uniforms.uMonoOffsetY.value = uMonoOffsetY;
+    cubeMat.uniforms.uMonoOffsetZ.value = uMonoOffsetZ;
     cubeMat.uniforms.uMonoScaleDesktop.value = uMonoScaleDesktop;
     cubeMat.uniforms.uMonoScaleMobile.value = uMonoScaleMobile;
 

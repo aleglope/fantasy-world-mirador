@@ -19,11 +19,21 @@ uniform sampler2D iChannel0;
 // uniform vec4  iMouse;   // uncomment only if MOUSE_control is re-enabled (mouse-driven orbit)
 
 // Fantasy World mod: uniforms para tunear el monolito en runtime vía leva.
+//   uMonoOffsetX:       offset horizontal del centro como fracción de iResolution.x
+//                       (positivo = derecha, negativo = izquierda).
 //   uMonoOffsetY:       offset vertical del centro como fracción de iResolution.y
-//                       (negativo = baja sobre la meseta).
+//                       (positivo = arriba, negativo = abajo).
+//   uMonoOffsetZ:       offset de profundidad. Se SUMA a la distancia eye→origen
+//                       del shader (default 5.5 = 2.0 + CAMERA_FAR=3.5).
+//                       Positivo = cámara más lejos = monolito más pequeño;
+//                       negativo = más cerca = más grande.
+//                       NOTA: efecto similar a bajar/subir uMonoScaleDesktop,
+//                       pero con cambio de PERSPECTIVA (no solo escala).
 //   uMonoScaleDesktop:  escala en pantallas landscape (aspect >= 1.2).
 //   uMonoScaleMobile:   escala en pantallas portrait (aspect <= 0.7).
+uniform float uMonoOffsetX;
 uniform float uMonoOffsetY;
+uniform float uMonoOffsetZ;
 uniform float uMonoScaleDesktop;
 uniform float uMonoScaleMobile;
 
@@ -49,7 +59,10 @@ out vec4 outColor;
 #define CAMERA_POS 0.06
 #define ROTATION_SPEED 0.22
 //#define STATIC_SHAPE 0.15
-#define CAMERA_FAR 3.5
+// CAMERA_FAR ahora viene como uniform (uMonoOffsetZ se SUMA al 3.5 base)
+// para que el slider de Z controle la profundidad. Mantengo la define para
+// activar la rama #ifdef CAMERA_FAR del shader original.
+#define CAMERA_FAR
 #define ANIM_SHAPE
 //#define ANIM_COLOR
 //#define USE_COLOR
@@ -506,7 +519,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
 #endif
 
 #ifdef CAMERA_FAR
-    vec3 eye = (2. + CAMERA_FAR) * vec3(cos(mouseX) * cos(mouseY), sin(mouseX) * cos(mouseY), sin(mouseY));
+    // Fantasy World mod: CAMERA_FAR base = 3.5; uMonoOffsetZ desplaza la cámara
+    // (positivo = más lejos = monolito más pequeño con cambio de perspectiva).
+    vec3 eye = (2. + 3.5 + uMonoOffsetZ) * vec3(cos(mouseX) * cos(mouseY), sin(mouseX) * cos(mouseY), sin(mouseY));
 #else
     vec3 eye = 4. * vec3(cos(mouseX) * cos(mouseY), sin(mouseX) * cos(mouseY), sin(mouseY));
 #endif
@@ -626,7 +641,9 @@ void main() {
     //   - monoScale:  factor de tamaño. <1 = cubo más pequeño en pantalla.
     // SHADOW_ALPHA muestrea iChannel0 con gl_FragCoord, así que el paisaje
     // se compone en la posición real del píxel aunque transformemos esto.
-    vec2 monoCenter = 0.5 * iResolution.xy + vec2(0.0, uMonoOffsetY * iResolution.y);
+    vec2 monoCenter = 0.5 * iResolution.xy
+                    + vec2(uMonoOffsetX * iResolution.x,
+                           uMonoOffsetY * iResolution.y);
     // monoScale adaptativo según aspect ratio del canvas.
     //   aspect <= 0.7  → uMonoScaleMobile (móvil portrait)
     //   aspect >= 1.2  → uMonoScaleDesktop (desktop landscape)

@@ -69,14 +69,14 @@ function Scene() {
   const { dprCap, resScale } = useControls('Performance', {
     dprCap: {
       label: 'DPR cap',
-      value: 1.0,
+      value: 1.3,
       min: 0.5,
       max: 2.0,
       step: 0.1,
     },
     resScale: {
       label: 'res scale',
-      value: 0.65,
+      value: 0.70,
       min: 0.4,
       max: 1.0,
       step: 0.05,
