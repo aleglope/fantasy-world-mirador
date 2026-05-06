@@ -10,13 +10,9 @@ import fullscreenVert from '../shaders/fullscreen.vert';
 import { usePingPongFBO } from '../hooks/usePingPongFBO';
 
 // Performance tuning (Fantasy World):
-// Estos tres valores son los que más mueven la aguja del FPS. Bajarlos
-// reduce píxeles ejecutados por los shaders pesados (landscape, clouds, cube).
-//   MAX_DPR        1.5 → 1.0  : en retina deja de renderizar a 2.25× píxeles.
-//   RES_SCALE_MAIN 0.85 → 0.65: pase landscape (el más caro) ~1.7× más rápido.
-//   RES_SCALE_CLOUDS 0.5      : ya estaba bien, las nubes son borrosas igual.
-const MAX_DPR = 1.0;
-const RES_SCALE_MAIN = 0.65;
+// dprCap y resScale ahora vienen como props desde App.tsx (controlados por
+// leva en runtime). Aquí mantenemos solo el factor de nubes que casi nunca
+// merece tunear porque las nubes ya son borrosas a media resolución.
 const RES_SCALE_CLOUDS = 0.5;
 // Alternate-frame clouds: cada cuántos frames se vuelve a renderizar el FBO
 // de nubes. 2 = se actualiza la mitad de veces (~30% extra de FPS), el frame
@@ -29,6 +25,9 @@ interface Props {
   onFirstFrame?: () => void;
   timeRef?: { current: number };
   frameRef?: { current: number };
+  // Performance knobs controlados por leva en App.tsx.
+  dprCap: number;
+  resScale: number;
 }
 
 export function ShaderLandscape({
@@ -37,12 +36,14 @@ export function ShaderLandscape({
   onFirstFrame,
   timeRef,
   frameRef,
+  dprCap,
+  resScale,
 }: Props) {
   const { gl, size } = useThree();
 
-  const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
-  const initMainW = Math.max(1, Math.floor(size.width * dpr * RES_SCALE_MAIN));
-  const initMainH = Math.max(1, Math.floor(size.height * dpr * RES_SCALE_MAIN));
+  const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+  const initMainW = Math.max(1, Math.floor(size.width * dpr * resScale));
+  const initMainH = Math.max(1, Math.floor(size.height * dpr * resScale));
 
   // Ping-pong FBO para el landscape (con feedback temporal vía iChannel0).
   const mainHi = usePingPongFBO({ width: initMainW, height: initMainH });
@@ -242,11 +243,12 @@ export function ShaderLandscape({
     notifiedFirst: false,
   });
 
-  // Resize debounced
+  // Resize debounced. También se ejecuta cuando cambian los controles leva
+  // de performance (dprCap/resScale): redimensiona los FBOs al instante.
   useEffect(() => {
     const handle = setTimeout(() => {
-      const mw = Math.max(1, Math.floor(size.width * dpr * RES_SCALE_MAIN));
-      const mh = Math.max(1, Math.floor(size.height * dpr * RES_SCALE_MAIN));
+      const mw = Math.max(1, Math.floor(size.width * dpr * resScale));
+      const mh = Math.max(1, Math.floor(size.height * dpr * resScale));
       const cw = Math.max(1, Math.floor(size.width * dpr * RES_SCALE_CLOUDS));
       const ch = Math.max(1, Math.floor(size.height * dpr * RES_SCALE_CLOUDS));
       const fullW = Math.max(1, Math.floor(size.width * dpr));
@@ -261,7 +263,7 @@ export function ShaderLandscape({
     }, 100);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.width, size.height]);
+  }, [size.width, size.height, dpr, resScale]);
 
   // Reset / mount / HMR re-mount: limpia FBOs y contadores.
   // Sin este path corriendo en mount, un HMR-remount crearía FBOs nuevos sin

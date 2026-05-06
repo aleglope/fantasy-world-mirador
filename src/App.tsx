@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
+import { useControls } from 'leva';
 import { ShaderLandscape } from './components/ShaderLandscape';
 import { Overlay } from './components/Overlay';
 
@@ -59,6 +60,29 @@ function Scene() {
   const timeRef = useRef(0);
   const frameRef = useRef(0);
 
+  // Controles de performance (leva). Ambos persisten en localStorage.
+  //   dprCap   = techo del devicePixelRatio efectivo. 1.0 = no retina;
+  //              2.0 = retina nativo (más nítido pero 4× píxeles).
+  //   resScale = factor de resolución del FBO landscape (el más caro).
+  //              0.65 default; subir si quieres más detalle de montañas,
+  //              bajar a 0.45-0.5 en PCs lentos.
+  const { dprCap, resScale } = useControls('Performance', {
+    dprCap: {
+      label: 'DPR cap',
+      value: 1.0,
+      min: 0.5,
+      max: 2.0,
+      step: 0.1,
+    },
+    resScale: {
+      label: 'res scale',
+      value: 0.65,
+      min: 0.4,
+      max: 1.0,
+      step: 0.05,
+    },
+  });
+
   const togglePause = useCallback(() => setPaused((p) => !p), []);
   const reset = useCallback(() => {
     setResetCounter((c) => c + 1);
@@ -90,7 +114,7 @@ function Scene() {
           stencil: false,
           depth: false,
         }}
-        dpr={[1, 1.5]}
+        dpr={dprCap}
         flat
         frameloop="always"
         style={{ position: 'absolute', inset: 0 }}
@@ -101,6 +125,8 @@ function Scene() {
           onFirstFrame={() => setReady(true)}
           timeRef={timeRef}
           frameRef={frameRef}
+          dprCap={dprCap}
+          resScale={resScale}
         />
       </Canvas>
       <Overlay
