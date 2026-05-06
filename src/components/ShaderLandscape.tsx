@@ -178,8 +178,8 @@ export function ShaderLandscape({
         // Tunables del monolito (sincronizados con leva en useFrame).
         uMonoOffsetX: { value: 0.0 },
         uMonoOffsetY: { value: 0.2 },
-        uMonoOffsetZ: { value: 0.0 },
-        uMonoScaleDesktop: { value: 0.43 },
+        uMonoOffsetZ: { value: 8.0 },
+        uMonoScaleDesktop: { value: 1.0 },
         uMonoScaleMobile: { value: 0.50 },
       },
     });
@@ -212,14 +212,14 @@ export function ShaderLandscape({
     },
     uMonoOffsetZ: {
       label: 'offset Z (depth)',
-      value: 0.0,
+      value: 8.0,
       min: -2.0,
-      max: 4.0,
-      step: 0.05,
+      max: 15.0,
+      step: 0.1,
     },
     uMonoScaleDesktop: {
       label: 'scale desktop',
-      value: 0.43,
+      value: 1.0,
       min: 0.05,
       max: 1.0,
       step: 0.01,
