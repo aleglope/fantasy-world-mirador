@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { useControls } from 'leva';
 import landscapeFrag from '../shaders/landscape.frag';
 import cloudsFrag from '../shaders/clouds.frag';
 import composeFrag from '../shaders/compose.frag';
@@ -8,8 +9,14 @@ import cubeFrag from '../shaders/cube.frag';
 import fullscreenVert from '../shaders/fullscreen.vert';
 import { usePingPongFBO } from '../hooks/usePingPongFBO';
 
-const MAX_DPR = 1.5;
-const RES_SCALE_MAIN = 0.85;
+// Performance tuning (Fantasy World):
+// Estos tres valores son los que más mueven la aguja del FPS. Bajarlos
+// reduce píxeles ejecutados por los shaders pesados (landscape, clouds, cube).
+//   MAX_DPR        1.5 → 1.0  : en retina deja de renderizar a 2.25× píxeles.
+//   RES_SCALE_MAIN 0.85 → 0.65: pase landscape (el más caro) ~1.7× más rápido.
+//   RES_SCALE_CLOUDS 0.5      : ya estaba bien, las nubes son borrosas igual.
+const MAX_DPR = 1.0;
+const RES_SCALE_MAIN = 0.65;
 const RES_SCALE_CLOUDS = 0.5;
 // Alternate-frame clouds: cada cuántos frames se vuelve a renderizar el FBO
 // de nubes. 2 = se actualiza la mitad de veces (~30% extra de FPS), el frame
@@ -167,10 +174,44 @@ export function ShaderLandscape({
         iResolution: { value: new THREE.Vector3(w, h, 1) },
         iTime: { value: 0 },
         iChannel0: { value: null },
+        // Tunables del monolito (sincronizados con leva en useFrame).
+        uMonoOffsetY: { value: -0.13 },
+        uMonoScaleDesktop: { value: 0.15 },
+        uMonoScaleMobile: { value: 0.50 },
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Controles leva para ajustar el monolito en vivo. Los valores se persisten
+  // en localStorage automáticamente. Una vez fijos los valores deseados, se
+  // pueden hardcodear en cube.frag.ts y eliminar leva.
+  const { uMonoOffsetY, uMonoScaleDesktop, uMonoScaleMobile } = useControls(
+    'Monolito',
+    {
+      uMonoOffsetY: {
+        label: 'offset Y',
+        value: -0.13,
+        min: -0.5,
+        max: 0.5,
+        step: 0.005,
+      },
+      uMonoScaleDesktop: {
+        label: 'scale desktop',
+        value: 0.15,
+        min: 0.05,
+        max: 1.0,
+        step: 0.01,
+      },
+      uMonoScaleMobile: {
+        label: 'scale móvil',
+        value: 0.50,
+        min: 0.05,
+        max: 1.0,
+        step: 0.01,
+      },
+    },
+  );
 
   // Cuatro escenas + cámara ortográfica trivial
   const { sceneMain, sceneClouds, sceneCompose, sceneCube, fsCamera, geom } = useMemo(() => {
@@ -264,6 +305,12 @@ export function ShaderLandscape({
   // Render loop manual: 4 pases por frame
   useFrame((_, delta) => {
     const s = stateRef.current;
+
+    // Sync uniforms del monolito con leva (siempre, también en pausa, para
+    // que los cambios del panel se reflejen al instante).
+    cubeMat.uniforms.uMonoOffsetY.value = uMonoOffsetY;
+    cubeMat.uniforms.uMonoScaleDesktop.value = uMonoScaleDesktop;
+    cubeMat.uniforms.uMonoScaleMobile.value = uMonoScaleMobile;
 
     if (!paused) {
       s.time += delta;

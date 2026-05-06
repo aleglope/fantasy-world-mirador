@@ -18,6 +18,15 @@ uniform float     iTime;
 uniform sampler2D iChannel0;
 // uniform vec4  iMouse;   // uncomment only if MOUSE_control is re-enabled (mouse-driven orbit)
 
+// Fantasy World mod: uniforms para tunear el monolito en runtime vía leva.
+//   uMonoOffsetY:       offset vertical del centro como fracción de iResolution.y
+//                       (negativo = baja sobre la meseta).
+//   uMonoScaleDesktop:  escala en pantallas landscape (aspect >= 1.2).
+//   uMonoScaleMobile:   escala en pantallas portrait (aspect <= 0.7).
+uniform float uMonoOffsetY;
+uniform float uMonoScaleDesktop;
+uniform float uMonoScaleMobile;
+
 out vec4 outColor;
 
 // =================== Shadertoy NslGRN — body start ===================
@@ -611,17 +620,35 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
 
 void main() {
     // Fantasy World mod: el cubo se renderiza como un monolito pequeño
-    // asentado sobre las cordilleras del paisaje, no como un objeto hero
-    // que llena el frame. Transformamos fragCoord en pantalla:
-    //   - monoCenter: posición en píxeles (origen abajo-izq) donde queda
-    //                 el centro del cubo. +y = arriba.
+    // asentado sobre las cordilleras del paisaje. Transformamos fragCoord
+    // en pantalla:
+    //   - monoCenter: posición del centro del cubo (origen abajo-izq, +y = arriba).
     //   - monoScale:  factor de tamaño. <1 = cubo más pequeño en pantalla.
     // SHADOW_ALPHA muestrea iChannel0 con gl_FragCoord, así que el paisaje
     // se compone en la posición real del píxel aunque transformemos esto.
-    vec2 monoCenter = 0.5 * iResolution.xy + vec2(0.0, -0.10 * iResolution.y);
-    float monoScale = 0.30;
-    vec2 fakeFragCoord = (gl_FragCoord.xy - monoCenter) / monoScale
-                       + 0.5 * iResolution.xy;
+    vec2 monoCenter = 0.5 * iResolution.xy + vec2(0.0, uMonoOffsetY * iResolution.y);
+    // monoScale adaptativo según aspect ratio del canvas.
+    //   aspect <= 0.7  → uMonoScaleMobile (móvil portrait)
+    //   aspect >= 1.2  → uMonoScaleDesktop (desktop landscape)
+    float aspect = iResolution.x / iResolution.y;
+    float monoScale = mix(uMonoScaleMobile, uMonoScaleDesktop, smoothstep(0.7, 1.2, aspect));
+
+    // Early-exit (Fantasy World perf): si el píxel está fuera del bounding
+    // circle del monolito, sólo lee iChannel0 y termina. Evita ejecutar el
+    // box-test, basis de cámara y demás cálculos para ~95% del canvas
+    // cuando monoScale es pequeña (~0.15 en desktop).
+    // Radio = 0.7 * monoScale * iResolution.x cubre el cubo + margen para
+    // ANIM_SHAPE / refracciones que se extienden ligeramente.
+    vec2 fragLocal = gl_FragCoord.xy - monoCenter;
+    float maxRadius = 0.7 * monoScale * iResolution.x;
+    if (dot(fragLocal, fragLocal) > maxRadius * maxRadius) {
+        // El path "miss" del shader devuelve alpha=0 (no alpha=1), así que
+        // igualamos para que el resultado de pantalla sea pixel-idéntico.
+        outColor = vec4(texture(iChannel0, gl_FragCoord.xy / iResolution.xy).rgb, 0.0);
+        return;
+    }
+
+    vec2 fakeFragCoord = fragLocal / monoScale + 0.5 * iResolution.xy;
 
     vec4 result;
     mainImage(result, fakeFragCoord);

@@ -473,7 +473,10 @@ vec2 raymarchTerrain( in vec3 ro, in vec3 rd, float tmin, float tmax )
     float ot = t;
     float odis = 0.0;
     float odis2 = 0.0;
-    for( int i=ZERO; i<400; i++ )
+    // Fantasy World perf: bajado 400 → 200. Con la cámara actual del valle
+    // los rayos casi nunca llegan a iter > 150 antes de pegar al terreno o
+    // pasarse de tmax. Si la cámara cambiara a vistas muy panorámicas, subir.
+    for( int i=ZERO; i<200; i++ )
     {
         th = 0.001*t;
 
@@ -677,7 +680,10 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     {
         float tf = t.y;
         float tfMax = (t.x>0.0)?t.x:tmax;
-        for(int i=ZERO; i<64; i++)
+        // Fantasy World perf: bajado 64 → 32. Los árboles cercanos se
+        // alcanzan en ~10-20 iter; el cull de 1500 unidades ya descarta los
+        // lejanos. Si se acerca mucho la cámara al dosel, subir a 48.
+        for(int i=ZERO; i<32; i++)
         {
             vec3  pos = ro + tf*rd;
             float dis = treesMap( pos, tf, hei, mid, displa);
